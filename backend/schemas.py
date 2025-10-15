@@ -50,7 +50,7 @@ class DeviceResponse(DeviceBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # Telemetry schemas
 class TelemetryCreate(BaseModel):
@@ -66,7 +66,7 @@ class TelemetryResponse(BaseModel):
     timestamp: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # Alert schemas
 class AlertCreate(BaseModel):
@@ -84,7 +84,7 @@ class AlertResponse(BaseModel):
     ack_at: Optional[datetime] = None
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # Command schemas
 class CommandCreate(BaseModel):
@@ -102,7 +102,7 @@ class CommandResponse(BaseModel):
     timestamp: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 # Log schemas
 class LogResponse(BaseModel):
@@ -116,4 +116,4 @@ class LogResponse(BaseModel):
     timestamp: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True

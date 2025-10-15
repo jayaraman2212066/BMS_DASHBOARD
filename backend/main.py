@@ -274,7 +274,7 @@ async def create_device(device: DeviceCreate, db: Session = Depends(get_db), cur
     if current_user.role not in ["admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
-    db_device = Device(**device.model_dump())
+    db_device = Device(**device.dict())
     db.add(db_device)
     db.commit()
     db.refresh(db_device)
