@@ -2,11 +2,6 @@ import random
 import json
 from datetime import datetime, timedelta
 from typing import Dict
-import pandas as pd
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 import io
 
 def simulate_device_data(device_id: str) -> Dict[str, float]:
@@ -51,79 +46,30 @@ def simulate_device_data(device_id: str) -> Dict[str, float]:
         "status": status
     }
 
-def generate_report(device_data: list, start_date: datetime, end_date: datetime, format: str = "pdf") -> bytes:
-    """Generate a report in PDF or CSV format"""
+def generate_report(device_data: list, start_date: datetime, end_date: datetime, format: str = "csv") -> str:
+    """Generate a simple CSV report"""
     
     if format.lower() == "csv":
-        # Generate CSV report
-        df = pd.DataFrame(device_data)
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False)
-        return csv_buffer.getvalue().encode('utf-8')
-    
-    elif format.lower() == "pdf":
-        # Generate PDF report
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
-        styles = getSampleStyleSheet()
-        story = []
+        # Generate simple CSV report
+        csv_lines = []
+        csv_lines.append("Device Report")
+        csv_lines.append(f"Period: {start_date.strftime('%Y-%m-%d %H:%M')} to {end_date.strftime('%Y-%m-%d %H:%M')}")
+        csv_lines.append("")
         
-        # Title
-        title = Paragraph("Voltas BMS Device Report", styles['Title'])
-        story.append(title)
-        story.append(Spacer(1, 12))
-        
-        # Date range
-        date_range = Paragraph(
-            f"Report Period: {start_date.strftime('%Y-%m-%d %H:%M')} to {end_date.strftime('%Y-%m-%d %H:%M')}",
-            styles['Normal']
-        )
-        story.append(date_range)
-        story.append(Spacer(1, 12))
-        
-        # Summary statistics
         if device_data:
-            df = pd.DataFrame(device_data)
-            
-            # Create summary table
-            summary_data = [
-                ['Metric', 'Average', 'Min', 'Max', 'Count'],
-            ]
-            
-            numeric_columns = df.select_dtypes(include=['number']).columns
-            for col in numeric_columns:
-                if col in df.columns:
-                    summary_data.append([
-                        col,
-                        f"{df[col].mean():.2f}",
-                        f"{df[col].min():.2f}",
-                        f"{df[col].max():.2f}",
-                        str(len(df[col]))
-                    ])
-            
-            summary_table = Table(summary_data)
-            summary_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 14),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            story.append(Paragraph("Summary Statistics", styles['Heading2']))
-            story.append(summary_table)
-            story.append(Spacer(1, 12))
+            # Add headers
+            if device_data:
+                headers = list(device_data[0].keys())
+                csv_lines.append(",".join(headers))
+                
+                # Add data rows
+                for row in device_data:
+                    csv_lines.append(",".join(str(row.get(h, "")) for h in headers))
         
-        # Build PDF
-        doc.build(story)
-        buffer.seek(0)
-        return buffer.getvalue()
+        return "\n".join(csv_lines)
     
     else:
-        raise ValueError("Unsupported format. Use 'pdf' or 'csv'")
+        return "Report format not supported"
 
 def validate_device_config(config: dict) -> bool:
     """Validate device configuration"""
@@ -146,23 +92,30 @@ def validate_device_config(config: dict) -> bool:
 def parse_csv_devices(csv_content: str) -> list:
     """Parse CSV content and return list of device dictionaries"""
     try:
-        df = pd.read_csv(io.StringIO(csv_content))
+        lines = csv_content.strip().split('\n')
+        if len(lines) < 2:
+            return []
+        
+        headers = [h.strip() for h in lines[0].split(',')]
         devices = []
         
-        for _, row in df.iterrows():
-            device = {
-                'device_id': str(row.get('device_id', '')),
-                'name': str(row.get('name', '')),
-                'protocol': str(row.get('protocol', 'Modbus')),
-                'ip': str(row.get('ip', '')),
-                'port': int(row.get('port', 502)),
-                'location': str(row.get('location', '')),
-                'description': str(row.get('description', '')),
-                'is_active': bool(row.get('is_active', True))
-            }
-            
-            if validate_device_config(device):
-                devices.append(device)
+        for line in lines[1:]:
+            values = [v.strip() for v in line.split(',')]
+            if len(values) >= len(headers):
+                device = {}
+                for i, header in enumerate(headers):
+                    if i < len(values):
+                        device[header] = values[i]
+                
+                # Convert types
+                if 'port' in device:
+                    try:
+                        device['port'] = int(device['port'])
+                    except:
+                        device['port'] = 502
+                
+                if validate_device_config(device):
+                    devices.append(device)
         
         return devices
     except Exception as e:
@@ -173,30 +126,22 @@ def calculate_device_health(telemetry_data: list) -> dict:
     if not telemetry_data:
         return {"health_score": 0, "status": "unknown"}
     
-    df = pd.DataFrame(telemetry_data)
-    
-    # Calculate health score based on various factors
+    # Simple health calculation
     health_score = 100
     status = "healthy"
     
-    # Check temperature stability
-    if 'temperature' in df.columns:
-        temp_std = df['temperature'].std()
-        if temp_std > 5:  # High temperature variation
-            health_score -= 20
-            status = "warning"
+    # Check for alert conditions in recent data
+    fault_count = sum(1 for d in telemetry_data if d.get('status') == 2)
+    warning_count = sum(1 for d in telemetry_data if d.get('status') == 1)
     
-    # Check for alert conditions
-    if 'status' in df.columns:
-        fault_ratio = (df['status'] == 2).sum() / len(df)
-        warning_ratio = (df['status'] == 1).sum() / len(df)
-        
-        if fault_ratio > 0.1:  # More than 10% faults
-            health_score -= 50
-            status = "critical"
-        elif warning_ratio > 0.2:  # More than 20% warnings
-            health_score -= 30
-            status = "warning"
+    total_count = len(telemetry_data)
+    
+    if fault_count > total_count * 0.1:  # More than 10% faults
+        health_score -= 50
+        status = "critical"
+    elif warning_count > total_count * 0.2:  # More than 20% warnings
+        health_score -= 30
+        status = "warning"
     
     health_score = max(0, health_score)
     
