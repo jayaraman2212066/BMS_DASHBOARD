@@ -12,7 +12,7 @@ import logging
 import webbrowser
 import threading
 import time
-from contextlib import asynccontextmanager
+from typing import List
 
 from database import engine, SessionLocal, Base
 from models import User, Device, Telemetry, Alert, Log, Command
@@ -151,27 +151,23 @@ def open_browser():
     time.sleep(2)
     webbrowser.open(f'http://localhost:{port}')
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
+app = FastAPI(
+    title="Voltas BMS Automation API",
+    description="Building Management System API for device monitoring and control",
+    version="1.0.0"
+)
+
+@app.on_event("startup")
+async def startup_event():
     db = SessionLocal()
     try:
         init_default_data(db)
         # Start simulation task
-        task = asyncio.create_task(simulation_task())
+        asyncio.create_task(simulation_task())
         # Open browser in a separate thread
         threading.Thread(target=open_browser, daemon=True).start()
-        yield
     finally:
         db.close()
-        task.cancel()
-
-app = FastAPI(
-    title="Voltas BMS Automation API",
-    description="Building Management System API for device monitoring and control",
-    version="1.0.0",
-    lifespan=lifespan
-)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -232,7 +228,7 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     }
 
 # Device endpoints
-@app.get("/api/devices", response_model=list[DeviceResponse])
+@app.get("/api/devices", response_model=List[DeviceResponse])
 async def get_devices(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     devices = db.query(Device).all()
     result = []
