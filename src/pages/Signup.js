@@ -18,18 +18,20 @@ const Signup = ({ onBackToLogin }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const sendOTP = async (e) => {
+  const createAccount = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const response = await api.post('/auth/send-signup-otp', formData);
+      const response = await api.post('/auth/signup', formData);
       if (response.data.success) {
-        setStep(2);
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        window.location.reload();
       }
     } catch (error) {
-      setError(error.response?.data?.message || 'Failed to send OTP');
+      setError(error.response?.data?.message || 'Failed to create account');
     } finally {
       setLoading(false);
     }
@@ -65,8 +67,7 @@ const Signup = ({ onBackToLogin }) => {
         
         {error && <div className="error-message">{error}</div>}
         
-        {step === 1 ? (
-          <form onSubmit={sendOTP}>
+        <form onSubmit={createAccount}>
             <div className="form-group">
               <label>Full Name</label>
               <input
@@ -131,43 +132,9 @@ const Signup = ({ onBackToLogin }) => {
             )}
             
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Sending OTP...' : 'Send OTP'}
+              {loading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
-        ) : (
-          <form onSubmit={verifyOTP}>
-            <div className="otp-info">
-              <p>📧 OTP sent to <strong>{formData.email}</strong></p>
-              <p>Check your email and enter the 6-digit code below:</p>
-            </div>
-            
-            <div className="form-group">
-              <label>Enter OTP</label>
-              <input
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="000000"
-                maxLength="6"
-                required
-                className="otp-input"
-              />
-            </div>
-            
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Verifying...' : 'Verify & Create Account'}
-            </button>
-            
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
-              onClick={() => setStep(1)}
-              style={{marginTop: '1rem'}}
-            >
-              Back to Form
-            </button>
-          </form>
-        )}
         
         <div className="auth-switch">
           <p>Already have an account? 
