@@ -1,7 +1,7 @@
 {
-  "name": "voltas-bms-backend",
+  "name": "bms-dashboard-backend",
   "version": "1.0.0",
-  "description": "Voltas BMS Backend API",
+  "description": "BMS Dashboard Backend API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -184,7 +184,7 @@ const Signup = ({ onBackToLogin }) => {
         {formData.role === 'admin' && (
           <div className="admin-info">
             <h4>🔑 Admin Registration</h4>
-            <p>Admin Key: <code>VOLTAS_ADMIN_2024</code></p>
+            <p>Admin Key: <code>BMS_ADMIN_2024</code></p>
             <p><small>This is for demo purposes only</small></p>
           </div>
         )}

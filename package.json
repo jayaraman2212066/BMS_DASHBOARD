@@ -1,5 +1,5 @@
 {
-  "name": "voltas-bms-frontend",
+  "name": "bms-dashboard-frontend",
   "version": "1.0.0",
   "private": true,
   "dependencies": {

@@ -96,7 +96,7 @@ app.post('/api/auth/send-signup-otp', otpLimiter, async (req, res) => {
     }
     
     // Admin role requires special admin key
-    if (role === 'admin' && req.body.adminKey !== 'VOLTAS_ADMIN_2024') {
+    if (role === 'admin' && req.body.adminKey !== 'BMS_ADMIN_2024') {
       return res.status(403).json({ success: false, message: 'Invalid admin key' });
     }
     

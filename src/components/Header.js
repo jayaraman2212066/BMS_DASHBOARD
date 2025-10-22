@@ -8,7 +8,7 @@ const Header = () => {
     <div className="header">
       <div className="logo">
         <span>🏭</span>
-        <span>Voltas BMS Dashboard</span>
+        <span>BMS Dashboard</span>
       </div>
       <div className="user-info">
         <span>{user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)}</span>
