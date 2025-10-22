@@ -5,6 +5,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const http = require('http');
+const { sendOTP } = require('./services/emailService');
+const { otpLimiter } = require('./middleware/rateLimiter');
 require('dotenv').config();
 
 const app = express();
@@ -55,6 +57,14 @@ const Alert = mongoose.model('Alert', {
   createdAt: { type: Date, default: Date.now }
 });
 
+const OTP = mongoose.model('OTP', {
+  email: { type: String, required: true },
+  otp: { type: String, required: true },
+  type: { type: String, enum: ['signup', 'login'], required: true },
+  expiresAt: { type: Date, default: Date.now, expires: 600 }, // 10 minutes
+  verified: { type: Boolean, default: false }
+});
+
 // Auth Middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -69,15 +79,132 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Routes
-app.post('/api/auth/login', async (req, res) => {
+// Generate OTP
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Send OTP for signup
+app.post('/api/auth/send-signup-otp', otpLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const { email, name, role } = req.body;
     
-    if (!user || !await bcrypt.compare(password, user.password)) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'User already exists' });
     }
+    
+    // Admin role requires special admin key
+    if (role === 'admin' && req.body.adminKey !== 'VOLTAS_ADMIN_2024') {
+      return res.status(403).json({ success: false, message: 'Invalid admin key' });
+    }
+    
+    const otp = generateOTP();
+    
+    // Save OTP
+    await OTP.deleteMany({ email, type: 'signup' }); // Remove old OTPs
+    const otpDoc = new OTP({ email, otp, type: 'signup' });
+    await otpDoc.save();
+    
+    // Send email
+    const emailResult = await sendOTP(email, otp);
+    if (!emailResult.success) {
+      return res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
+    
+    res.json({ success: true, message: 'OTP sent to email' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Verify OTP and complete signup
+app.post('/api/auth/verify-signup', async (req, res) => {
+  try {
+    const { email, otp, name, password, role } = req.body;
+    
+    // Verify OTP
+    const otpDoc = await OTP.findOne({ email, otp, type: 'signup', verified: false });
+    if (!otpDoc) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+    
+    // Create user
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: role || 'guest'
+    });
+    await user.save();
+    
+    // Mark OTP as verified
+    otpDoc.verified = true;
+    await otpDoc.save();
+    
+    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, 
+                           process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
+    
+    res.json({ 
+      success: true, 
+      token, 
+      user: { id: user._id, name: user.name, email: user.email, role: user.role }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Send OTP for login
+app.post('/api/auth/send-login-otp', otpLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    const otp = generateOTP();
+    
+    // Save OTP
+    await OTP.deleteMany({ email, type: 'login' }); // Remove old OTPs
+    const otpDoc = new OTP({ email, otp, type: 'login' });
+    await otpDoc.save();
+    
+    // Send email
+    const emailResult = await sendOTP(email, otp);
+    if (!emailResult.success) {
+      return res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
+    
+    res.json({ success: true, message: 'OTP sent to email' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Verify OTP and login
+app.post('/api/auth/verify-login', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    
+    // Verify OTP
+    const otpDoc = await OTP.findOne({ email, otp, type: 'login', verified: false });
+    if (!otpDoc) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+    
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    // Mark OTP as verified
+    otpDoc.verified = true;
+    await otpDoc.save();
     
     const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, 
                            process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
@@ -155,14 +282,16 @@ app.get('/api/telemetry/:deviceId', authenticateToken, async (req, res) => {
 const initializeData = async () => {
   try {
     // Create default users
+    // Create demo admin user only
     const adminExists = await User.findOne({ email: 'admin@voltas.com' });
     if (!adminExists) {
-      const users = [
-        { name: 'Admin User', email: 'admin@voltas.com', password: await bcrypt.hash('admin123', 10), role: 'admin' },
-        { name: 'Operator User', email: 'operator@voltas.com', password: await bcrypt.hash('operator123', 10), role: 'operator' },
-        { name: 'Guest User', email: 'guest@voltas.com', password: await bcrypt.hash('guest123', 10), role: 'guest' }
-      ];
-      await User.insertMany(users);
+      const adminUser = new User({
+        name: 'Demo Admin',
+        email: 'admin@voltas.com',
+        password: await bcrypt.hash('admin123', 10),
+        role: 'admin'
+      });
+      await adminUser.save();
     }
     
     // Create default devices
